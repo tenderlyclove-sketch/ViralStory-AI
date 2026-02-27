@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
+  "devCommand": "pnpm run dev",
+  "framework": "remix",
+  "nodeVersion": "20.x"
+}
