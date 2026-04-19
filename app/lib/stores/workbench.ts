@@ -1,11 +1,11 @@
 import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
-import JSZip from 'jszip';
 import * as nodePath from 'node:path';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
+import { WORK_DIR, WORK_DIR_NAME } from '~/utils/constants';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
@@ -24,6 +24,8 @@ export type ArtifactUpdateState = Pick<ArtifactState, 'title' | 'closed'>;
 type Artifacts = MapStore<Record<string, ArtifactState>>;
 
 export type WorkbenchViewType = 'code' | 'preview';
+
+const textEncoder = new TextEncoder();
 
 export class WorkbenchStore {
   #previewsStore = new PreviewsStore(webcontainer);
@@ -204,39 +206,29 @@ export class WorkbenchStore {
     }
   }
 
-  async createProjectZip() {
-    await this.saveAllFiles();
-
-    const webcontainerInstance = await webcontainer;
-    const zip = new JSZip();
-    const files = this.#filesStore.files.get();
-
-    const filePaths = Object.entries(files)
-      .filter(([, dirent]) => dirent?.type === 'file')
-      .map(([filePath]) => filePath);
-
-    await Promise.all(
-      filePaths.map(async (filePath) => {
-        const relativePath = nodePath.relative(webcontainerInstance.workdir, filePath);
-
-        if (!relativePath || relativePath.startsWith('..')) {
-          return;
-        }
-
-        const content = await webcontainerInstance.fs.readFile(relativePath);
-        zip.file(relativePath, content);
-      }),
-    );
-
-    return zip.generateAsync({ type: 'blob' });
-  }
-
   getFileModifcations() {
     return this.#filesStore.getFileModifications();
   }
 
   resetAllFileModifications() {
     this.#filesStore.resetFileModifications();
+  }
+
+  async getDownloadableProjectFiles() {
+    const container = await webcontainer;
+    const files = await readDirectoryRecursive(container, WORK_DIR);
+    const documents = this.#editorStore.documents.get();
+
+    for (const [filePath, document] of Object.entries(documents)) {
+      files.set(filePath, textEncoder.encode(document.value));
+    }
+
+    return Array.from(files.entries())
+      .sort(([filePathA], [filePathB]) => filePathA.localeCompare(filePathB))
+      .map(([filePath, content]) => ({
+        path: nodePath.posix.join(WORK_DIR_NAME, nodePath.posix.relative(WORK_DIR, filePath)),
+        content,
+      }));
   }
 
   abortAllActions() {
@@ -303,3 +295,29 @@ export class WorkbenchStore {
 }
 
 export const workbenchStore = new WorkbenchStore();
+
+async function readDirectoryRecursive(
+  container: Awaited<typeof webcontainer>,
+  directoryPath: string,
+  files: Map<string, Uint8Array> = new Map(),
+) {
+  const entries = (await container.fs.readdir(directoryPath, {
+    withFileTypes: true,
+  })) as Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+
+  for (const entry of entries) {
+    const entryPath = nodePath.posix.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      await readDirectoryRecursive(container, entryPath, files);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      const fileContent = await container.fs.readFile(entryPath);
+      files.set(entryPath, fileContent instanceof Uint8Array ? fileContent : new Uint8Array(fileContent));
+    }
+  }
+
+  return files;
+}

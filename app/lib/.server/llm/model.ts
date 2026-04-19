@@ -1,10 +1,9 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
 
-export function getOpenRouterModel(apiKey: string) {
-  const openrouter = createOpenAI({
+export function getAnthropicModel(apiKey: string) {
+  const anthropic = createAnthropic({
     apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
   });
 
-  return openrouter('arcee-ai/trinity-large-preview:free');
+  return anthropic('claude-3-5-sonnet-20240620');
 }

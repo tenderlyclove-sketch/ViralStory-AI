@@ -1,3 +1,3 @@
 interface Env {
-  OPENROUTER_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
 }
