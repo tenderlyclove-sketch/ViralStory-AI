@@ -99,6 +99,23 @@ export const Workbench = memo(({ chatStarted, isStreaming }: WorkspaceProps) => 
     workbenchStore.resetCurrentDocument();
   }, []);
 
+  const onDownloadZip = useCallback(async () => {
+    try {
+      const zipBlob = await workbenchStore.createProjectZip();
+      const url = URL.createObjectURL(zipBlob);
+      const anchor = document.createElement('a');
+
+      anchor.href = url;
+      anchor.download = 'project.zip';
+      anchor.click();
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to create ZIP download');
+    }
+  }, []);
+
   return (
     chatStarted && (
       <motion.div
@@ -121,6 +138,10 @@ export const Workbench = memo(({ chatStarted, isStreaming }: WorkspaceProps) => 
               <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor">
                 <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
                 <div className="ml-auto" />
+                <PanelHeaderButton className="mr-1 text-sm" onClick={onDownloadZip}>
+                  <div className="i-ph:download-simple" />
+                  Download ZIP
+                </PanelHeaderButton>
                 {selectedView === 'code' && (
                   <PanelHeaderButton
                     className="mr-1 text-sm"

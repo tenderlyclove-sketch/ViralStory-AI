@@ -1,4 +1,6 @@
 import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
+import JSZip from 'jszip';
+import * as nodePath from 'node:path';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
@@ -200,6 +202,33 @@ export class WorkbenchStore {
     for (const filePath of this.unsavedFiles.get()) {
       await this.saveFile(filePath);
     }
+  }
+
+  async createProjectZip() {
+    await this.saveAllFiles();
+
+    const webcontainerInstance = await webcontainer;
+    const zip = new JSZip();
+    const files = this.#filesStore.files.get();
+
+    const filePaths = Object.entries(files)
+      .filter(([, dirent]) => dirent?.type === 'file')
+      .map(([filePath]) => filePath);
+
+    await Promise.all(
+      filePaths.map(async (filePath) => {
+        const relativePath = nodePath.relative(webcontainerInstance.workdir, filePath);
+
+        if (!relativePath || relativePath.startsWith('..')) {
+          return;
+        }
+
+        const content = await webcontainerInstance.fs.readFile(relativePath);
+        zip.file(relativePath, content);
+      }),
+    );
+
+    return zip.generateAsync({ type: 'blob' });
   }
 
   getFileModifcations() {
