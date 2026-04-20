@@ -1,9 +1,11 @@
 import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
+import * as nodePath from 'node:path';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
+import { WORK_DIR, WORK_DIR_NAME } from '~/utils/constants';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
@@ -22,6 +24,8 @@ export type ArtifactUpdateState = Pick<ArtifactState, 'title' | 'closed'>;
 type Artifacts = MapStore<Record<string, ArtifactState>>;
 
 export type WorkbenchViewType = 'code' | 'preview';
+
+const textEncoder = new TextEncoder();
 
 export class WorkbenchStore {
   #previewsStore = new PreviewsStore(webcontainer);
@@ -210,6 +214,23 @@ export class WorkbenchStore {
     this.#filesStore.resetFileModifications();
   }
 
+  async getDownloadableProjectFiles() {
+    const container = await webcontainer;
+    const files = await readDirectoryRecursive(container, WORK_DIR);
+    const documents = this.#editorStore.documents.get();
+
+    for (const [filePath, document] of Object.entries(documents)) {
+      files.set(filePath, textEncoder.encode(document.value));
+    }
+
+    return Array.from(files.entries())
+      .sort(([filePathA], [filePathB]) => filePathA.localeCompare(filePathB))
+      .map(([filePath, content]) => ({
+        path: nodePath.posix.join(WORK_DIR_NAME, nodePath.posix.relative(WORK_DIR, filePath)),
+        content,
+      }));
+  }
+
   abortAllActions() {
     // TODO: what do we wanna do and how do we wanna recover from this?
   }
@@ -274,3 +295,29 @@ export class WorkbenchStore {
 }
 
 export const workbenchStore = new WorkbenchStore();
+
+async function readDirectoryRecursive(
+  container: Awaited<typeof webcontainer>,
+  directoryPath: string,
+  files: Map<string, Uint8Array> = new Map(),
+) {
+  const entries = (await container.fs.readdir(directoryPath, {
+    withFileTypes: true,
+  })) as Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+
+  for (const entry of entries) {
+    const entryPath = nodePath.posix.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      await readDirectoryRecursive(container, entryPath, files);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      const fileContent = await container.fs.readFile(entryPath);
+      files.set(entryPath, fileContent instanceof Uint8Array ? fileContent : new Uint8Array(fileContent));
+    }
+  }
+
+  return files;
+}

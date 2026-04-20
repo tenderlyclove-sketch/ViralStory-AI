@@ -3,7 +3,7 @@
   "description": "StackBlitz AI Agent",
   "private": true,
   "license": "MIT",
-  "packageManager": "pnpm@9.4.0",
+  "packageManager": "npm@11.12.1",
   "sideEffects": false,
   "type": "module",
   "scripts": {
@@ -17,7 +17,7 @@
     "start": "bindings=$(./bindings.sh) && wrangler pages dev ./build/client $bindings",
     "typecheck": "tsc",
     "typegen": "wrangler types",
-    "preview": "pnpm run build && pnpm run start"
+    "preview": "npm run build && npm run start"
   },
   "engines": {
     "node": ">=18.18.0"
@@ -60,6 +60,7 @@
     "framer-motion": "^11.2.12",
     "isbot": "^4.1.0",
     "istextorbinary": "^9.5.0",
+    "jszip": "^3.10.1",
     "jose": "^5.6.3",
     "nanostores": "^0.10.3",
     "react": "^18.2.0",

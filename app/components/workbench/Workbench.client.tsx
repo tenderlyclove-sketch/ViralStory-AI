@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
   type OnChangeCallback as OnEditorChange,
@@ -10,6 +10,7 @@ import {
 import { IconButton } from '~/components/ui/IconButton';
 import { PanelHeaderButton } from '~/components/ui/PanelHeaderButton';
 import { Slider, type SliderOptions } from '~/components/ui/Slider';
+import { downloadZipFile } from '~/lib/zip';
 import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
@@ -62,6 +63,7 @@ export const Workbench = memo(({ chatStarted, isStreaming }: WorkspaceProps) => 
   const unsavedFiles = useStore(workbenchStore.unsavedFiles);
   const files = useStore(workbenchStore.files);
   const selectedView = useStore(workbenchStore.currentView);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const setSelectedView = (view: WorkbenchViewType) => {
     workbenchStore.currentView.set(view);
@@ -99,6 +101,27 @@ export const Workbench = memo(({ chatStarted, isStreaming }: WorkspaceProps) => 
     workbenchStore.resetCurrentDocument();
   }, []);
 
+  const onDownloadZip = useCallback(async () => {
+    setIsDownloading(true);
+
+    try {
+      const projectFiles = await workbenchStore.getDownloadableProjectFiles();
+
+      if (projectFiles.length === 0) {
+        toast.info('There are no project files to download yet');
+        return;
+      }
+
+      await downloadZipFile('project.zip', projectFiles);
+      toast.success('Project ZIP downloaded');
+    } catch (error) {
+      toast.error('Failed to create project ZIP');
+      console.error(error);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, []);
+
   return (
     chatStarted && (
       <motion.div
@@ -121,6 +144,10 @@ export const Workbench = memo(({ chatStarted, isStreaming }: WorkspaceProps) => 
               <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor">
                 <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
                 <div className="ml-auto" />
+                <PanelHeaderButton className="mr-1 text-sm" disabled={isDownloading} onClick={onDownloadZip}>
+                  <div className={classNames('i-ph:download-simple', { 'i-svg-spinners:90-ring-with-bg': isDownloading })} />
+                  {isDownloading ? 'Preparing ZIP' : 'Download as ZIP'}
+                </PanelHeaderButton>
                 {selectedView === 'code' && (
                   <PanelHeaderButton
                     className="mr-1 text-sm"
