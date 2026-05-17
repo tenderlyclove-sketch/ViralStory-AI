@@ -52,3 +52,15 @@ Bolt.new supports most popular JavaScript frameworks and libraries. If it runs o
 
 **How can I add make sure my framework/project works well in bolt?**  
 We are excited to work with the JavaScript ecosystem to improve functionality in Bolt. Reach out to us via [hello@stackblitz.com](mailto:hello@stackblitz.com) to discuss how we can partner!
+
+## Codex Mode
+
+Bolt includes an integration with [OpenAI Codex](https://openai.com/index/introducing-codex/) — a cloud-based software engineering agent powered by `codex-mini-latest`.
+
+### Enabling Codex Mode
+1. Add your OpenAI API key in **Settings → Providers → OpenAI**
+2. Toggle **Codex mode** in the chat toolbar (robot icon)
+3. Describe a complex task and hit send
+
+Codex will reason through your codebase, plan changes, and apply them directly to your project — the same way the AI normally works, just powered by a more deliberate reasoning model. Best for: large refactors, adding authentication, database schema migrations, test suites.
+

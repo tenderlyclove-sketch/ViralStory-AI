@@ -1,7 +1,7 @@
 import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
-import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
+import { StreamingMessageParser, type ActionCallbackData, type ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
@@ -265,6 +265,32 @@ export class WorkbenchStore {
     }
 
     artifact.runner.runAction(data);
+  }
+
+  async applyCodexArtifact(rawXml: string) {
+    const id = `codex-${Date.now()}`;
+    const messageId = id;
+    
+    this.addArtifact({ id, title: 'Codex', messageId, runner: new ActionRunner(webcontainer) });
+
+    const parsedActions: ActionCallbackData[] = [];
+    
+    const parser = new StreamingMessageParser({
+      callbacks: {
+        onActionOpen: (data) => {
+          this.addAction(data);
+        },
+        onActionClose: (data) => {
+          parsedActions.push(data);
+        },
+      }
+    });
+
+    parser.parse(messageId, rawXml);
+
+    for (const data of parsedActions) {
+      this.runAction(data);
+    }
   }
 
   #getArtifact(id: string) {

@@ -7,6 +7,11 @@ import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
 import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
+import { CodexModeToggle } from './CodexModeToggle';
+import { CodexProgress } from './CodexProgress';
+import { useStore } from '@nanostores/react';
+import { codexModeEnabled, codexStatus, codexCurrentTask, codexElapsedSeconds } from '~/lib/stores/codex';
+import { chatStore } from '~/lib/stores/chat';
 
 import styles from './BaseChat.module.scss';
 
@@ -58,6 +63,93 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     ref,
   ) => {
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
+    const isCodexMode = useStore(codexModeEnabled);
+
+    React.useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key.toLowerCase() === 'c' && e.shiftKey && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          codexModeEnabled.set(!codexModeEnabled.get());
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    const handleCodexSubmit = async () => {
+      const currentInput = input;
+      if (!currentInput) return;
+      handleInputChange?.({ target: { value: '' } } as any);
+      
+      const { workbenchStore } = await import('~/lib/stores/workbench');
+      const files = workbenchStore.files.get();
+      const serializedFiles = Object.fromEntries(
+        Object.entries(files)
+          .filter(([, f]) => f?.type === 'file')
+          .map(([p, f]) => [p, f?.content ?? ''])
+      );
+
+      codexStatus.set('running');
+      codexCurrentTask.set({
+        id: `codex-${Date.now()}`,
+        task: currentInput,
+        status: 'running',
+        startedAt: Date.now()
+      });
+      codexElapsedSeconds.set(0);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+
+      try {
+        const response = await fetch('/api/codex', {
+          method: 'POST',
+          body: JSON.stringify({ task: currentInput, files: serializedFiles }),
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+          codexStatus.set('error');
+          codexCurrentTask.set({ ...codexCurrentTask.get()!, status: 'error', error: err.error });
+          return;
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No stream available');
+        
+        const decoder = new TextDecoder();
+        let accumulated = '';
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          accumulated += decoder.decode(value, { stream: true });
+        }
+        
+        chatStore.setKey('messages', [
+          ...chatStore.get().messages,
+          { id: Date.now().toString(), role: 'user', content: currentInput },
+          { id: (Date.now() + 1).toString(), role: 'assistant', content: accumulated }
+        ]);
+        
+        workbenchStore.applyCodexArtifact(accumulated);
+        codexStatus.set('complete');
+        codexCurrentTask.set({ ...codexCurrentTask.get()!, status: 'complete', completedAt: Date.now() });
+
+      } catch (error: any) {
+        clearTimeout(timeout);
+        codexStatus.set('error');
+        codexCurrentTask.set({ 
+          ...codexCurrentTask.get()!, 
+          status: 'error', 
+          error: error.name === 'AbortError' ? 'Codex timed out after 2 minutes. Try a smaller task.' : error.message 
+        });
+      }
+    };
 
     return (
       <div
@@ -108,6 +200,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     'shadow-sm border border-bolt-elements-borderColor bg-bolt-elements-prompt-background backdrop-filter backdrop-blur-[8px] rounded-lg overflow-hidden',
                   )}
                 >
+                  <CodexProgress />
                   <textarea
                     ref={textareaRef}
                     className={`w-full pl-4 pt-4 pr-16 focus:outline-none resize-none text-md text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary bg-transparent`}
@@ -119,7 +212,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
                         event.preventDefault();
 
-                        sendMessage?.(event);
+                        if (isCodexMode) {
+                          handleCodexSubmit();
+                        } else {
+                          sendMessage?.(event);
+                        }
                       }
                     }}
                     value={input}
@@ -130,7 +227,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       minHeight: TEXTAREA_MIN_HEIGHT,
                       maxHeight: TEXTAREA_MAX_HEIGHT,
                     }}
-                    placeholder="How can Bolt help you today?"
+                    placeholder={isCodexMode ? "Describe a task for Codex... (e.g. 'Add user authentication with JWT')" : "How can Bolt help you today?"}
                     translate="no"
                   />
                   <ClientOnly>
@@ -144,13 +241,18 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             return;
                           }
 
-                          sendMessage?.(event);
+                          if (isCodexMode) {
+                            handleCodexSubmit();
+                          } else {
+                            sendMessage?.(event);
+                          }
                         }}
                       />
                     )}
                   </ClientOnly>
                   <div className="flex justify-between text-sm p-4 pt-2">
                     <div className="flex gap-1 items-center">
+                      <CodexModeToggle />
                       <IconButton
                         title="Enhance prompt"
                         disabled={input.length === 0 || enhancingPrompt}
