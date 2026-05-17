@@ -9,6 +9,7 @@ import { cubicEasingFn } from '~/utils/easings';
 import { logger } from '~/utils/logger';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
+import { SettingsWindow } from '~/components/settings/SettingsWindow';
 
 const menuVariants = {
   closed: {
@@ -38,6 +39,7 @@ export function Menu() {
   const [list, setList] = useState<ChatHistoryItem[]>([]);
   const [open, setOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const loadEntries = useCallback(() => {
     if (db) {
@@ -163,10 +165,18 @@ export function Menu() {
             </Dialog>
           </DialogRoot>
         </div>
-        <div className="flex items-center border-t border-bolt-elements-borderColor p-4">
+        <div className="flex items-center border-t border-bolt-elements-borderColor p-4 gap-2">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-2 text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-theme"
+          >
+            <div className="i-ph:gear-fill" />
+            Settings
+          </button>
           <ThemeSwitch className="ml-auto" />
         </div>
       </div>
+      <SettingsWindow open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </motion.div>
   );
 }
