@@ -17,7 +17,7 @@ export function getMiniMaxModel(apiKey: string, baseURL?: string) {
     baseURL: baseURL || 'https://api.minimax.io/v1',
   });
 
-  return openai('MiniMax-M2.7');
+  return openai('MiniMax-M3');
 }
 
 export function getModel(provider: LLMProvider, apiKey: string, baseURL?: string) {

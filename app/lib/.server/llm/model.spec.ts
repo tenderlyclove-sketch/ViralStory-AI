@@ -64,11 +64,11 @@ describe('model', () => {
       });
     });
 
-    it('uses MiniMax-M2.7 model', () => {
+    it('uses MiniMax-M3 model', () => {
       getMiniMaxModel('test-key');
 
       const mockFn = vi.mocked(createOpenAI).mock.results[0].value;
-      expect(mockFn).toHaveBeenCalledWith('MiniMax-M2.7');
+      expect(mockFn).toHaveBeenCalledWith('MiniMax-M3');
     });
   });
 
